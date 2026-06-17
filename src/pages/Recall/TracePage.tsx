@@ -23,6 +23,7 @@ const TracePage: React.FC = () => {
     batch?: SealBatch;
     flows: SealFlow[];
     seals: Seal[];
+    targetSeal?: Seal;
   } | null>(null);
   const [searched, setSearched] = useState(false);
 
@@ -39,11 +40,19 @@ const TracePage: React.FC = () => {
 
     setSearched(true);
     let foundBatch: SealBatch | undefined;
+    let targetSeal: Seal | undefined;
 
     if (searchType === 'batch') {
       foundBatch = getBatchByNo(searchTerm);
     } else {
-      foundBatch = batches.find(b => b.seals.some(s => s.sealCode === searchTerm));
+      for (const b of batches) {
+        const seal = b.seals.find(s => s.sealCode === searchTerm);
+        if (seal) {
+          foundBatch = b;
+          targetSeal = seal;
+          break;
+        }
+      }
     }
 
     if (foundBatch) {
@@ -52,8 +61,13 @@ const TracePage: React.FC = () => {
         batch: foundBatch,
         flows,
         seals: foundBatch.seals,
+        targetSeal,
       });
-      setSearchParams({ batchNo: foundBatch.batchNo });
+      if (searchType === 'batch') {
+        setSearchParams({ batchNo: foundBatch.batchNo });
+      } else {
+        setSearchParams({ batchNo: foundBatch.batchNo, sealCode: searchTerm });
+      }
     } else {
       setTraceResult(null);
     }
@@ -74,9 +88,14 @@ const TracePage: React.FC = () => {
     {
       key: 'sealCode',
       title: '印章编号',
-      render: (seal) => (
-        <span className="font-mono text-sm text-gray-800">{seal.sealCode}</span>
-      ),
+      render: (seal) => {
+        const isTarget = traceResult?.targetSeal?.id === seal.id;
+        return (
+          <span className={`font-mono text-sm ${isTarget ? 'text-primary font-bold bg-primary/10 px-2 py-0.5 rounded' : 'text-gray-800'}`}>
+            {seal.sealCode}
+          </span>
+        );
+      },
     },
     {
       key: 'sealName',
@@ -96,13 +115,25 @@ const TracePage: React.FC = () => {
       },
     },
     {
-      key: 'location',
-      title: '当前位置',
+      key: 'department',
+      title: '当前部门',
       render: (seal) => (
         <div className="flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5 text-gray-400" />
           <span className="text-gray-600">
-            {seal.currentDepartment || seal.currentHolder || '在库'}
+            {seal.currentDepartment || '-'}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'holder',
+      title: '领取人',
+      render: (seal) => (
+        <div className="flex items-center gap-1.5">
+          <User className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-gray-600">
+            {seal.currentHolder || '-'}
           </span>
         </div>
       ),
@@ -111,9 +142,12 @@ const TracePage: React.FC = () => {
       key: 'receivedDate',
       title: '领用日期',
       render: (seal) => (
-        <span className="text-gray-500 text-sm">
-          {seal.receivedDate ? formatDate(seal.receivedDate) : '-'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-gray-500 text-sm">
+            {seal.receivedDate ? formatDate(seal.receivedDate) : '-'}
+          </span>
+        </div>
       ),
     },
   ];
@@ -191,6 +225,63 @@ const TracePage: React.FC = () => {
 
       {traceResult && traceResult.batch && (
         <>
+          {traceResult.targetSeal && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-7 h-7 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <h2 className="text-xl font-bold text-gray-900 font-mono">
+                      {traceResult.targetSeal.sealCode}
+                    </h2>
+                    <Badge variant={sealStatusConfig[traceResult.targetSeal.status].variant} size="lg">
+                      {sealStatusConfig[traceResult.targetSeal.status].label}
+                    </Badge>
+                  </div>
+                  <p className="text-gray-600 mb-4">{traceResult.targetSeal.sealName} · 所属批次：{traceResult.batch.batchNo}</p>
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="bg-white rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                        <MapPin className="w-4 h-4" />
+                        当前部门
+                      </div>
+                      <div className="font-semibold text-gray-900">
+                        {traceResult.targetSeal.currentDepartment || '在库'}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                        <User className="w-4 h-4" />
+                        领取人
+                      </div>
+                      <div className="font-semibold text-gray-900">
+                        {traceResult.targetSeal.currentHolder || '-'}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-amber-200">
+                      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                        <Calendar className="w-4 h-4" />
+                        领用日期
+                      </div>
+                      <div className="font-semibold text-gray-900">
+                        {traceResult.targetSeal.receivedDate ? formatDate(traceResult.targetSeal.receivedDate) : '-'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(`/batches/${traceResult.batch!.id}`)}
+                >
+                  查看批次详情
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/10 rounded-xl p-6">
             <div className="flex items-start justify-between">
               <div>
@@ -205,13 +296,15 @@ const TracePage: React.FC = () => {
                 </div>
                 <p className="text-gray-600">{traceResult.batch.sealName}</p>
               </div>
-              <Button
-                variant="secondary"
-                onClick={() => navigate(`/batches/${traceResult.batch!.id}`)}
-              >
-                查看批次详情
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
+              {!traceResult.targetSeal && (
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(`/batches/${traceResult.batch!.id}`)}
+                >
+                  查看批次详情
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              )}
             </div>
           </div>
 

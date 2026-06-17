@@ -91,21 +91,39 @@ const BatchDetail: React.FC = () => {
       },
     },
     {
-      key: 'holder',
-      title: '当前持有人',
+      key: 'department',
+      title: '当前部门',
       render: (seal) => (
-        <span className="text-gray-600">
-          {seal.currentHolder || seal.currentDepartment || '-'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-gray-600">
+            {seal.currentDepartment || '-'}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'holder',
+      title: '领取人',
+      render: (seal) => (
+        <div className="flex items-center gap-1.5">
+          <User className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-gray-600">
+            {seal.currentHolder || '-'}
+          </span>
+        </div>
       ),
     },
     {
       key: 'receivedDate',
       title: '领用日期',
       render: (seal) => (
-        <span className="text-gray-500 text-sm">
-          {seal.receivedDate ? formatDate(seal.receivedDate) : '-'}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-gray-500 text-sm">
+            {seal.receivedDate ? formatDate(seal.receivedDate) : '-'}
+          </span>
+        </div>
       ),
     },
   ];
@@ -382,7 +400,7 @@ const BatchDetail: React.FC = () => {
 
       {showFlowModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-900 mb-4">发放印章</h3>
             <div className="space-y-4">
               <div>
@@ -403,18 +421,6 @@ const BatchDetail: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  发放数量（剩余 {batch.remainingQuantity} 枚）
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={batch.remainingQuantity}
-                  value={flowForm.quantity}
-                  onChange={(e) => setFlowForm({ ...flowForm, quantity: parseInt(e.target.value) || 1 })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   领取人
                 </label>
                 <Input
@@ -423,6 +429,110 @@ const BatchDetail: React.FC = () => {
                   onChange={(e) => setFlowForm({ ...flowForm, recipient: e.target.value })}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  发放方式
+                </label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      flowForm.autoAssign
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setFlowForm({ ...flowForm, autoAssign: true, seals: [] })}
+                  >
+                    自动分配
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      !flowForm.autoAssign
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setFlowForm({ ...flowForm, autoAssign: false })}
+                  >
+                    手动选择
+                  </button>
+                </div>
+              </div>
+              {flowForm.autoAssign ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    发放数量（剩余 <span className="text-primary font-semibold">{batch.remainingQuantity}</span> 枚）
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={batch.remainingQuantity}
+                    value={flowForm.quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      setFlowForm({ ...flowForm, quantity: val });
+                      if (val > batch.remainingQuantity) {
+                        setFlowError(`发放数量不能超过剩余库存(${batch.remainingQuantity}枚)`);
+                      } else {
+                        setFlowError('');
+                      }
+                    }}
+                    error={flowError}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    选择印章编号（已选 <span className="text-primary font-semibold">{flowForm.seals.length}</span> 枚，剩余 {inStockSeals.length} 枚）
+                  </label>
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50">
+                    {inStockSeals.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        {inStockSeals.map(seal => (
+                          <label
+                            key={seal.id}
+                            className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${
+                              flowForm.seals.includes(seal.id)
+                                ? 'bg-primary/10 border-primary'
+                                : 'bg-white border-gray-200 hover:border-primary/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="rounded text-primary focus:ring-primary"
+                              checked={flowForm.seals.includes(seal.id)}
+                              onChange={(e) => {
+                                const newSeals = e.target.checked
+                                  ? [...flowForm.seals, seal.id]
+                                  : flowForm.seals.filter(id => id !== seal.id);
+                                setFlowForm({
+                                  ...flowForm,
+                                  seals: newSeals,
+                                  quantity: newSeals.length,
+                                });
+                                if (newSeals.length > batch.remainingQuantity) {
+                                  setFlowError(`发放数量不能超过剩余库存(${batch.remainingQuantity}枚)`);
+                                } else {
+                                  setFlowError('');
+                                }
+                              }}
+                            />
+                            <span className="text-sm font-mono text-gray-700">{seal.sealCode}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-center text-gray-500 py-4">暂无可用印章</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {flowError && (
+                <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-rose-600">{flowError}</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-end gap-3 mt-6">
               <Button variant="ghost" onClick={() => setShowFlowModal(false)}>
@@ -431,10 +541,17 @@ const BatchDetail: React.FC = () => {
               <Button
                 variant="primary"
                 onClick={handleSubmitFlow}
-                disabled={!flowForm.departmentId || !flowForm.recipient}
+                disabled={
+                  !flowForm.departmentId ||
+                  !flowForm.recipient ||
+                  flowForm.quantity <= 0 ||
+                  flowForm.quantity > batch.remainingQuantity ||
+                  (!flowForm.autoAssign && flowForm.seals.length !== flowForm.quantity) ||
+                  !!flowError
+                }
               >
                 <Plus className="w-4 h-4 mr-2" />
-                确认发放
+                确认发放 {flowForm.quantity > 0 ? `(${flowForm.quantity}枚)` : ''}
               </Button>
             </div>
           </div>

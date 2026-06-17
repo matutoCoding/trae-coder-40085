@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../lib/utils';
-import { CheckCircle, Clock, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, AlertTriangle, TrendingUp } from 'lucide-react';
 import type { ApprovalNode } from '../../types';
 import { formatDateTime } from '../../utils/date';
 
@@ -10,7 +10,7 @@ export interface TimelineItem {
   subtitle?: string;
   description?: string;
   time?: string;
-  status: 'completed' | 'current' | 'pending' | 'rejected' | 'overdue';
+  status: 'completed' | 'current' | 'pending' | 'rejected' | 'overdue' | 'escalated';
 }
 
 interface TimelineProps {
@@ -48,6 +48,12 @@ const statusConfig = {
     iconColor: 'text-amber-500',
     lineColor: 'bg-gray-200',
     bgColor: 'bg-amber-50',
+  },
+  escalated: {
+    icon: TrendingUp,
+    iconColor: 'text-rose-500',
+    lineColor: 'bg-rose-300',
+    bgColor: 'bg-rose-50',
   },
 };
 
@@ -104,11 +110,20 @@ export const mapApprovalNodesToTimeline = (
 ): TimelineItem[] => {
   return nodes.map((node, index) => {
     let status: TimelineItem['status'] = 'pending';
+    let description = node.comment;
 
     if (node.status === 'approved') {
       status = 'completed';
     } else if (node.status === 'rejected') {
       status = 'rejected';
+    } else if (node.status === 'escalated') {
+      status = 'escalated';
+      const escalatedInfo = node.escalatedToName 
+        ? `已升级至：${node.escalatedToName}` 
+        : '已升级处理';
+      description = description 
+        ? `${description}\n${escalatedInfo}` 
+        : escalatedInfo;
     } else if (node.isOverdue) {
       status = 'overdue';
     } else if (index === currentIndex) {
@@ -119,8 +134,12 @@ export const mapApprovalNodesToTimeline = (
       id: node.id,
       title: node.nodeName,
       subtitle: node.approverName,
-      description: node.comment,
-      time: node.approvedAt ? formatDateTime(node.approvedAt) : undefined,
+      description,
+      time: node.approvedAt 
+        ? formatDateTime(node.approvedAt) 
+        : node.escalatedAt 
+        ? formatDateTime(node.escalatedAt)
+        : undefined,
       status,
     };
   });

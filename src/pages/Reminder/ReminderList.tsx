@@ -104,11 +104,26 @@ const ReminderList: React.FC = () => {
             <span>{item.node.approverName}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <StatusDot status={item.node.isOverdue ? 'warning' : 'info'} pulse={item.node.isOverdue} />
-            <span className={`text-sm ${item.node.isOverdue ? 'text-red-600' : 'text-gray-600'}`}>
+            <StatusDot 
+              status={
+                item.node.status === 'escalated' ? 'danger' : 
+                item.node.isOverdue ? 'warning' : 'info'
+              } 
+              pulse={item.node.isOverdue || item.node.status === 'escalated'} 
+            />
+            <span className={`text-sm font-medium ${
+              item.node.status === 'escalated' ? 'text-red-600' :
+              item.node.isOverdue ? 'text-red-600' : 'text-gray-600'
+            }`}>
               {nodeStatusConfig[item.node.status].label}
             </span>
           </div>
+          {item.node.status === 'escalated' && item.node.escalatedToName && (
+            <div className="flex items-center gap-1 text-xs text-red-600 bg-red-50 rounded px-2 py-0.5 mt-1 w-fit">
+              <TrendingUp className="w-3 h-3" />
+              <span>已升级至：{item.node.escalatedToName}</span>
+            </div>
+          )}
         </div>
       ),
     },

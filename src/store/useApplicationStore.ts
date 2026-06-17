@@ -259,16 +259,21 @@ export const useApplicationStore = create<ApplicationState>()(
                 
                 if (overdueHours >= 72 && !hasEscalated) {
                   const escalationUser = mockUsers.find(u => u.departmentId === 'd007');
+                  const now = new Date().toISOString();
                   const reminder: ReminderRecord = {
                     id: generateId(),
                     nodeId: node.id,
                     type: 'escalation',
                     content: `审批已超时${overdueHours}小时，已自动升级至上级领导`,
-                    sentAt: new Date().toISOString(),
+                    sentAt: now,
                     escalatedTo: escalationUser?.id,
                     escalatedToName: escalationUser?.name || '总经理',
                   };
                   updatedNode.isEscalated = true;
+                  updatedNode.status = 'escalated';
+                  updatedNode.escalatedAt = now;
+                  updatedNode.escalatedTo = escalationUser?.id;
+                  updatedNode.escalatedToName = escalationUser?.name || '总经理';
                   updatedNode.reminders = [...updatedNode.reminders, reminder];
                   nodeChanged = true;
                 }

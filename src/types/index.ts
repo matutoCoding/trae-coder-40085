@@ -37,6 +37,9 @@ export interface ApprovalNode {
   status: 'pending' | 'approved' | 'rejected' | 'escalated';
   deadline: string;
   approvedAt?: string;
+  escalatedAt?: string;
+  escalatedTo?: string;
+  escalatedToName?: string;
   comment?: string;
   isOverdue: boolean;
   isEscalated: boolean;

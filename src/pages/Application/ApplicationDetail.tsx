@@ -258,7 +258,9 @@ const ApplicationDetail: React.FC = () => {
               <CardContent className="space-y-4">
                 <div
                   className={`p-4 rounded-lg border-2 ${
-                    isOverdue
+                    currentNode.status === 'escalated'
+                      ? 'border-rose-300 bg-rose-50'
+                      : isOverdue
                       ? 'border-amber-300 bg-amber-50'
                       : 'border-primary-200 bg-primary-50'
                   }`}
@@ -267,16 +269,35 @@ const ApplicationDetail: React.FC = () => {
                     <span className="font-medium text-gray-900">
                       {currentNode.nodeName}
                     </span>
-                    {isOverdue && (
-                      <Badge variant="warning">已超时</Badge>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {currentNode.status === 'escalated' && (
+                        <Badge variant="danger">已升级</Badge>
+                      )}
+                      {isOverdue && currentNode.status !== 'escalated' && (
+                        <Badge variant="warning">已超时</Badge>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
                     审批人：{currentNode.approverName}
                   </p>
+                  {currentNode.status === 'escalated' && currentNode.escalatedToName && (
+                    <p className="text-sm text-rose-600 mb-2 font-medium flex items-center gap-1">
+                      <TrendingUp className="h-4 w-4" />
+                      已升级至：{currentNode.escalatedToName}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 text-sm">
-                    <Clock className={`h-4 w-4 ${isOverdue ? 'text-amber-500' : 'text-gray-400'}`} />
-                    <span className={isOverdue ? 'text-amber-600 font-medium' : 'text-gray-600'}>
+                    <Clock className={`h-4 w-4 ${
+                      currentNode.status === 'escalated' 
+                        ? 'text-rose-500' 
+                        : isOverdue ? 'text-amber-500' : 'text-gray-400'
+                    }`} />
+                    <span className={
+                      currentNode.status === 'escalated' 
+                        ? 'text-rose-600 font-medium' 
+                        : isOverdue ? 'text-amber-600 font-medium' : 'text-gray-600'
+                    }>
                       {formatRemainingTime(currentNode.deadline)}
                     </span>
                   </div>
