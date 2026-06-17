@@ -4,6 +4,7 @@ import type { SealApplication, ApprovalNode, ReminderRecord } from '../types';
 import { mockApplications, getApplicationById, getOverdueApplications } from '../mock/data/applications';
 import { generateId, addHours, getOverdueHours } from '../utils/date';
 import { mockUsers } from '../mock/data/users';
+import { useOverdueRuleStore } from './useOverdueRuleStore';
 
 interface ApplicationState {
   applications: SealApplication[];
@@ -36,7 +37,9 @@ export const useApplicationStore = create<ApplicationState>()(
 
       createApplication: (data) => {
         const applicant = mockUsers[0];
-        const timeoutHours = data.urgency === 'emergency' ? 4 : data.urgency === 'urgent' ? 12 : 24;
+        const urgency = (data.urgency || 'normal') as 'normal' | 'urgent' | 'emergency';
+        const rule = useOverdueRuleStore.getState().getRuleByUrgency(urgency);
+        const nodeTimeoutHours = rule.firstReminderHours * 2;
         const now = new Date();
 
         const approvalNodes: ApprovalNode[] = [
@@ -48,7 +51,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '部门主管审批',
             orderIndex: 0,
             status: 'pending',
-            deadline: addHours(now, timeoutHours),
+            deadline: addHours(now, nodeTimeoutHours),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -62,7 +65,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '行政复核',
             orderIndex: 1,
             status: 'pending',
-            deadline: addHours(now, timeoutHours * 2),
+            deadline: addHours(now, nodeTimeoutHours * 2),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -76,7 +79,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '印章管理员用印',
             orderIndex: 2,
             status: 'pending',
-            deadline: addHours(now, timeoutHours * 3),
+            deadline: addHours(now, nodeTimeoutHours * 3),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -171,6 +174,7 @@ export const useApplicationStore = create<ApplicationState>()(
             if (!node) return app;
 
             const escalatedUser = escalateTo ? mockUsers.find(u => u.id === escalateTo) : undefined;
+            const now = new Date().toISOString();
             const reminder: ReminderRecord = {
               id: generateId(),
               nodeId,
@@ -178,7 +182,7 @@ export const useApplicationStore = create<ApplicationState>()(
               content: type === 'escalation'
                 ? `审批已超时${node.overdueHours}小时，已升级至上级领导`
                 : `您的用印审批已超时${node.overdueHours}小时，请尽快处理`,
-              sentAt: new Date().toISOString(),
+              sentAt: now,
               escalatedTo: escalateTo,
               escalatedToName: escalatedUser?.name,
             };
@@ -187,11 +191,18 @@ export const useApplicationStore = create<ApplicationState>()(
               ...app,
               approvalNodes: app.approvalNodes.map(n => {
                 if (n.id !== nodeId) return n;
-                return {
+                const updated: ApprovalNode = {
                   ...n,
-                  isEscalated: type === 'escalation' ? true : n.isEscalated,
                   reminders: [...n.reminders, reminder],
                 };
+                if (type === 'escalation') {
+                  updated.isEscalated = true;
+                  updated.status = 'escalated';
+                  updated.escalatedAt = now;
+                  updated.escalatedTo = escalateTo;
+                  updated.escalatedToName = escalatedUser?.name || '上级领导';
+                }
+                return updated;
               }),
             };
           }),
@@ -201,7 +212,8 @@ export const useApplicationStore = create<ApplicationState>()(
       getOverdueList: () => {
         return get().applications.filter(app =>
           app.approvalNodes.some(node => 
-            node.isOverdue && node.orderIndex === app.currentNodeIndex && node.status === 'pending'
+            node.isOverdue && node.orderIndex === app.currentNodeIndex && 
+            (node.status === 'pending' || node.status === 'escalated')
           )
         );
       },
@@ -212,6 +224,7 @@ export const useApplicationStore = create<ApplicationState>()(
           const newApplications = state.applications.map(app => {
             if (app.status !== 'pending') return app;
             
+            const rule = useOverdueRuleStore.getState().getRuleByUrgency(app.urgency);
             let appChanged = false;
             const newNodes = app.approvalNodes.map(node => {
               if (node.status !== 'pending') return node;
@@ -233,47 +246,50 @@ export const useApplicationStore = create<ApplicationState>()(
                 const normalReminders = node.reminders.filter(r => r.type === 'normal');
                 const hasEscalated = node.reminders.some(r => r.type === 'escalation');
                 
-                if (overdueHours >= 24 && normalReminders.length === 0) {
+                if (overdueHours >= rule.firstReminderHours && normalReminders.length === 0) {
                   const reminder: ReminderRecord = {
                     id: generateId(),
                     nodeId: node.id,
                     type: 'normal',
-                    content: `您的用印审批已超时${overdueHours}小时，请尽快处理`,
+                    content: `您的用印审批已超时${overdueHours.toFixed(1)}小时，请尽快处理`,
                     sentAt: new Date().toISOString(),
                   };
                   updatedNode.reminders = [...node.reminders, reminder];
                   nodeChanged = true;
                 }
                 
-                if (overdueHours >= 48 && normalReminders.length === 1) {
-                  const reminder: ReminderRecord = {
-                    id: generateId(),
-                    nodeId: node.id,
-                    type: 'normal',
-                    content: `重要提醒：用印审批已超时${overdueHours}小时，请立即处理`,
-                    sentAt: new Date().toISOString(),
-                  };
-                  updatedNode.reminders = [...updatedNode.reminders, reminder];
-                  nodeChanged = true;
+                if (overdueHours >= rule.secondReminderHours && normalReminders.length <= 1) {
+                  const hasSecond = normalReminders.length >= 2;
+                  if (!hasSecond) {
+                    const reminder: ReminderRecord = {
+                      id: generateId(),
+                      nodeId: node.id,
+                      type: 'normal',
+                      content: `重要提醒：用印审批已超时${overdueHours.toFixed(1)}小时，请立即处理`,
+                      sentAt: new Date().toISOString(),
+                    };
+                    updatedNode.reminders = [...updatedNode.reminders, reminder];
+                    nodeChanged = true;
+                  }
                 }
                 
-                if (overdueHours >= 72 && !hasEscalated) {
-                  const escalationUser = mockUsers.find(u => u.departmentId === 'd007');
+                if (overdueHours >= rule.escalationHours && !hasEscalated) {
+                  const escalationUser = mockUsers.find(u => u.id === rule.escalationRoleId);
                   const now = new Date().toISOString();
                   const reminder: ReminderRecord = {
                     id: generateId(),
                     nodeId: node.id,
                     type: 'escalation',
-                    content: `审批已超时${overdueHours}小时，已自动升级至上级领导`,
+                    content: `审批已超时${overdueHours.toFixed(1)}小时，已自动升级至${rule.escalationRoleName}`,
                     sentAt: now,
-                    escalatedTo: escalationUser?.id,
-                    escalatedToName: escalationUser?.name || '总经理',
+                    escalatedTo: rule.escalationRoleId,
+                    escalatedToName: rule.escalationRoleName,
                   };
                   updatedNode.isEscalated = true;
                   updatedNode.status = 'escalated';
                   updatedNode.escalatedAt = now;
-                  updatedNode.escalatedTo = escalationUser?.id;
-                  updatedNode.escalatedToName = escalationUser?.name || '总经理';
+                  updatedNode.escalatedTo = rule.escalationRoleId;
+                  updatedNode.escalatedToName = rule.escalationRoleName;
                   updatedNode.reminders = [...updatedNode.reminders, reminder];
                   nodeChanged = true;
                 }

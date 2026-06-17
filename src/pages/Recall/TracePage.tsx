@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Search, Package, MapPin, User, Calendar, TrendingUp, AlertTriangle, FileText, ArrowRight, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Search, Package, MapPin, User, Calendar, TrendingUp, AlertTriangle, FileText, ArrowRight, ChevronRight, ArrowLeft, RefreshCw, Check, Info } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
+import { Input, TextArea, Select } from '../../components/ui/Input';
 import { Table, Column } from '../../components/ui/Table';
 import { StatusDot } from '../../components/common/StatusDot';
 import { Timeline, TimelineItem } from '../../components/ui/Timeline';
 import { useBatchStore } from '../../store/useBatchStore';
+import { useRecallStore } from '../../store/useRecallStore';
 import { formatDate, formatDateTime } from '../../utils/date';
 import { batchStatusConfig, sealStatusConfig } from '../../utils/status';
 import type { SealBatch, SealFlow, Seal } from '../../types';
@@ -26,6 +27,12 @@ const TracePage: React.FC = () => {
     targetSeal?: Seal;
   } | null>(null);
   const [searched, setSearched] = useState(false);
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const [recallMode, setRecallMode] = useState<'single' | 'department' | 'selected'>('single');
+  const [selectedSealIds, setSelectedSealIds] = useState<string[]>([]);
+  const [recallReason, setRecallReason] = useState('');
+  const [recallPriority, setRecallPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  const createRecall = useRecallStore(state => state.createRecall);
 
   useEffect(() => {
     const batchNo = searchParams.get('batchNo');
@@ -71,6 +78,70 @@ const TracePage: React.FC = () => {
     } else {
       setTraceResult(null);
     }
+  };
+
+  const inUseSeals = useMemo(() => {
+    return traceResult?.seals.filter(s => s.status === 'in_use') || [];
+  }, [traceResult?.seals]);
+
+  const departmentSeals = useMemo(() => {
+    if (!traceResult?.targetSeal?.currentDepartment) return [];
+    return inUseSeals.filter(s => s.currentDepartment === traceResult.targetSeal?.currentDepartment);
+  }, [inUseSeals, traceResult?.targetSeal]);
+
+  const openRecallModal = (mode: 'single' | 'department' | 'selected') => {
+    setRecallMode(mode);
+    setSelectedSealIds(mode === 'single' && traceResult?.targetSeal ? [traceResult.targetSeal.id] : []);
+    setRecallReason('');
+    setRecallPriority('medium');
+    setShowRecallModal(true);
+  };
+
+  const handleRecallSubmit = () => {
+    if (!traceResult?.batch) return;
+
+    let sealIdsToRecall: string[] = [];
+    if (recallMode === 'single' && traceResult.targetSeal) {
+      sealIdsToRecall = [traceResult.targetSeal.id];
+    } else if (recallMode === 'department') {
+      sealIdsToRecall = departmentSeals.map(s => s.id);
+    } else {
+      sealIdsToRecall = selectedSealIds;
+    }
+
+    if (sealIdsToRecall.length === 0) return;
+
+    const sealCodesByDept: Record<string, string[]> = {};
+    const deptIds: string[] = [];
+    const deptIdMap: Record<string, string> = {};
+
+    traceResult.flows.forEach(flow => {
+      deptIdMap[flow.departmentName] = flow.departmentId;
+    });
+
+    sealIdsToRecall.forEach(sealId => {
+      const seal = traceResult.seals.find(s => s.id === sealId);
+      if (seal && seal.currentDepartment) {
+        const deptId = deptIdMap[seal.currentDepartment] || `dept-${seal.currentDepartment}`;
+        if (!sealCodesByDept[deptId]) {
+          sealCodesByDept[deptId] = [];
+          deptIds.push(deptId);
+        }
+        sealCodesByDept[deptId].push(seal.sealCode);
+      }
+    });
+
+    const newRecall = createRecall({
+      batchId: traceResult.batch.id,
+      batchNo: traceResult.batch.batchNo,
+      reason: recallReason || '印章质量问题，需召回检查',
+      priority: recallPriority,
+      departmentIds: deptIds,
+      sealCodesByDept,
+    });
+
+    setShowRecallModal(false);
+    navigate(`/recalls/${newRecall.id}`);
   };
 
   const mapFlowToTimeline = (flows: SealFlow[]): TimelineItem[] => {
@@ -271,13 +342,28 @@ const TracePage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate(`/batches/${traceResult.batch!.id}`)}
-                >
-                  查看批次详情
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="danger"
+                    onClick={() => openRecallModal('single')}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    召回这枚章
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => openRecallModal('department')}
+                  >
+                    召回同部门全部
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => navigate(`/batches/${traceResult.batch!.id}`)}
+                  >
+                    查看批次详情
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -443,6 +529,203 @@ const TracePage: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {showRecallModal && traceResult?.batch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-rose-500" />
+              发起印章召回
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  召回范围
+                </label>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      recallMode === 'single'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setRecallMode('single')}
+                    disabled={!traceResult.targetSeal}
+                  >
+                    单枚召回
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      recallMode === 'department'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setRecallMode('department')}
+                  >
+                    同部门全部
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      recallMode === 'selected'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setRecallMode('selected')}
+                  >
+                    手动选择
+                  </button>
+                </div>
+              </div>
+
+              {recallMode === 'single' && traceResult.targetSeal && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Check className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <div className="font-mono font-semibold text-gray-900">
+                        {traceResult.targetSeal.sealCode}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {traceResult.targetSeal.sealName} · {traceResult.targetSeal.currentDepartment}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {recallMode === 'department' && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {traceResult.targetSeal?.currentDepartment || '该批次发放部门'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        共 {departmentSeals.length} 枚在用印章将被召回
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {recallMode === 'selected' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      选择召回印章（已选 {selectedSealIds.length} 枚）
+                    </label>
+                    <button
+                      className="text-sm text-primary hover:underline"
+                      onClick={() => {
+                        setSelectedSealIds(inUseSeals.map(s => s.id));
+                      }}
+                    >
+                      全选在用
+                    </button>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto bg-gray-50">
+                    {inUseSeals.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        {inUseSeals.map(seal => (
+                          <label
+                            key={seal.id}
+                            className={`flex items-center gap-2 p-2 rounded border cursor-pointer transition-all ${
+                              selectedSealIds.includes(seal.id)
+                                ? 'bg-primary/10 border-primary'
+                                : 'bg-white border-gray-200 hover:border-primary/50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="rounded text-primary focus:ring-primary"
+                              checked={selectedSealIds.includes(seal.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSealIds([...selectedSealIds, seal.id]);
+                                } else {
+                                  setSelectedSealIds(selectedSealIds.filter(id => id !== seal.id));
+                                }
+                              }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-mono text-gray-700 block truncate">
+                                {seal.sealCode}
+                              </span>
+                              <span className="text-xs text-gray-400 block truncate">
+                                {seal.currentDepartment}
+                              </span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-center text-gray-500 py-4">暂无在用印章</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  召回优先级
+                </label>
+                <Select
+                  value={recallPriority}
+                  onChange={(e) => setRecallPriority(e.target.value as 'high' | 'medium' | 'low')}
+                >
+                  <option value="high">高优先级</option>
+                  <option value="medium">中优先级</option>
+                  <option value="low">低优先级</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  召回原因
+                </label>
+                <TextArea
+                  rows={3}
+                  placeholder="请描述召回原因..."
+                  value={recallReason}
+                  onChange={(e) => setRecallReason(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <span className="text-sm text-blue-700">
+                  召回通知将按部门分别发送，通知中会包含具体印章编号清单。
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <Button variant="ghost" onClick={() => setShowRecallModal(false)}>
+                取消
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleRecallSubmit}
+                disabled={
+                  (recallMode === 'single' && !traceResult.targetSeal) ||
+                  (recallMode === 'department' && departmentSeals.length === 0) ||
+                  (recallMode === 'selected' && selectedSealIds.length === 0)
+                }
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                确认召回
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -33,7 +33,7 @@ const ReminderList: React.FC = () => {
     applications.forEach(app => {
       if (app.status !== 'pending') return;
       app.approvalNodes.forEach(node => {
-        if (node.status === 'pending' && node.orderIndex === app.currentNodeIndex) {
+        if ((node.status === 'pending' || node.status === 'escalated') && node.orderIndex === app.currentNodeIndex) {
           if (filterType === 'all' ||
               (filterType === 'overdue' && node.isOverdue) ||
               (filterType === 'escalated' && node.isEscalated)) {
@@ -49,7 +49,11 @@ const ReminderList: React.FC = () => {
         }
       });
     });
-    return result.sort((a, b) => b.node.overdueHours - a.node.overdueHours);
+    return result.sort((a, b) => {
+      if (b.node.status === 'escalated' && a.node.status !== 'escalated') return 1;
+      if (a.node.status === 'escalated' && b.node.status !== 'escalated') return -1;
+      return b.node.overdueHours - a.node.overdueHours;
+    });
   }, [applications, searchTerm, filterType, filterUrgency]);
 
   const stats = useMemo(() => {

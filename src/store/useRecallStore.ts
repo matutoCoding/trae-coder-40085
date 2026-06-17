@@ -17,6 +17,7 @@ interface RecallState {
     reason: string;
     priority: 'high' | 'medium' | 'low';
     departmentIds: string[];
+    sealCodesByDept?: Record<string, string[]>;
   }) => Recall;
   updateRecallStatus: (id: string, status: Recall['status']) => void;
   updateNoticeStatus: (
@@ -47,6 +48,7 @@ export const useRecallStore = create<RecallState>()(
       createRecall: (data) => {
         const notices: RecallNotice[] = data.departmentIds.map(deptId => {
           const dept = mockDepartments.find(d => d.id === deptId);
+          const sealCodes = data.sealCodesByDept?.[deptId] || [];
           return {
             id: generateId(),
             recallId: '',
@@ -55,8 +57,11 @@ export const useRecallStore = create<RecallState>()(
             status: 'sent',
             sentAt: new Date().toISOString(),
             contactPerson: dept?.manager,
+            sealCodes,
           };
         });
+
+        const allSealCodes = Object.values(data.sealCodesByDept || {}).flat();
 
         const newRecall: Recall = {
           id: `recall-${generateId()}`,
@@ -69,6 +74,7 @@ export const useRecallStore = create<RecallState>()(
           initiatedByName: '孙强',
           priority: data.priority,
           notices,
+          sealCodes: allSealCodes,
         };
 
         notices.forEach(n => {

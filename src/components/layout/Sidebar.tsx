@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ChevronLeft,
   Stamp,
+  Settings,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -47,6 +48,11 @@ const navItems = [
     path: '/recalls',
     label: '召回管理',
     icon: RefreshCw,
+  },
+  {
+    path: '/settings/overdue-rules',
+    label: '规则配置',
+    icon: Settings,
   },
 ];
 

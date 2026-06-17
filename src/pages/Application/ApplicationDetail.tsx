@@ -18,6 +18,7 @@ import { Badge } from '../../components/ui/Badge';
 import { TextArea } from '../../components/ui/Input';
 import { Timeline, mapApprovalNodesToTimeline } from '../../components/ui/Timeline';
 import { useApplicationStore } from '../../store/useApplicationStore';
+import { useOverdueRuleStore } from '../../store/useOverdueRuleStore';
 import { formatDateTime, formatRemainingTime } from '../../utils/date';
 import {
   applicationStatusConfig,
@@ -35,6 +36,7 @@ const ApplicationDetail: React.FC = () => {
   const sendReminder = useApplicationStore(state => state.sendReminder);
 
   const application = getApplication(id || '');
+  const getRuleByUrgency = useOverdueRuleStore(state => state.getRuleByUrgency);
   const [comment, setComment] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -383,6 +385,12 @@ const ApplicationDetail: React.FC = () => {
                         {formatDateTime(node.approvedAt)}
                       </p>
                     )}
+                    {node.escalatedAt && node.status === 'escalated' && (
+                      <div className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        升级时间：{formatDateTime(node.escalatedAt)}
+                      </div>
+                    )}
                     {node.comment && (
                       <p className="text-xs text-gray-600 mt-2 italic">
                         备注：{node.comment}
@@ -391,6 +399,53 @@ const ApplicationDetail: React.FC = () => {
                   </div>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                当前套用规则
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">紧急程度</span>
+                <Badge variant={urgencyConfig[application.urgency].variant} size="sm">
+                  {urgencyConfig[application.urgency].label}
+                </Badge>
+              </div>
+              <div className="h-px bg-gray-100" />
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">一级催办</span>
+                  <span className="text-gray-900 font-medium">
+                    {getRuleByUrgency(application.urgency).firstReminderHours}小时后
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">二级催办</span>
+                  <span className="text-gray-900 font-medium">
+                    {getRuleByUrgency(application.urgency).secondReminderHours}小时后
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">自动升级</span>
+                  <span className="text-gray-900 font-medium">
+                    {getRuleByUrgency(application.urgency).escalationHours}小时后
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">升级对象</span>
+                  <span className="text-gray-900 font-medium">
+                    {getRuleByUrgency(application.urgency).escalationRoleName}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                * 规则可在"规则配置"页面调整
+              </p>
             </CardContent>
           </Card>
         </div>

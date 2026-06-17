@@ -116,6 +116,7 @@ export interface RecallNotice {
   confirmedQuantity?: number;
   remark?: string;
   contactPerson?: string;
+  sealCodes: string[];
 }
 
 export interface Recall {
@@ -129,6 +130,7 @@ export interface Recall {
   initiatedByName: string;
   priority: 'high' | 'medium' | 'low';
   notices: RecallNotice[];
+  sealCodes: string[];
 }
 
 export interface OverdueStat {
@@ -148,6 +150,15 @@ export interface DashboardStats {
   monthlyApplications: number[];
   departmentStats: { name: string; count: number }[];
   topOverduePersons: OverdueStat[];
+}
+
+export interface OverdueRule {
+  urgency: 'normal' | 'urgent' | 'emergency';
+  firstReminderHours: number;
+  secondReminderHours: number;
+  escalationHours: number;
+  escalationRoleId: string;
+  escalationRoleName: string;
 }
 
 export type ApplicationStatus = SealApplication['status'];

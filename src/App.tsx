@@ -12,6 +12,7 @@ import TracePage from "./pages/Recall/TracePage";
 import RecallList from "./pages/Recall/RecallList";
 import NewRecall from "./pages/Recall/NewRecall";
 import RecallDetail from "./pages/Recall/RecallDetail";
+import OverdueRuleSettings from "./pages/Settings/OverdueRuleSettings";
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/recalls" element={<RecallList />} />
           <Route path="/recalls/new" element={<NewRecall />} />
           <Route path="/recalls/:id" element={<RecallDetail />} />
+          <Route path="/settings/overdue-rules" element={<OverdueRuleSettings />} />
         </Routes>
       </Layout>
     </Router>

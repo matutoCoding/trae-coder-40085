@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, Calendar, User, MapPin, FileText, AlertTriangle, Send, Plus, TrendingUp, CheckCircle, XCircle, Hash } from 'lucide-react';
+import { ArrowLeft, Package, Calendar, User, MapPin, FileText, AlertTriangle, Send, Plus, TrendingUp, CheckCircle, XCircle, Hash, ChevronDown, ChevronRight, Layers, List } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -21,6 +21,8 @@ const BatchDetail: React.FC = () => {
   const { getBatch, recordFlow } = useBatchStore();
   const [showFlowModal, setShowFlowModal] = useState(false);
   const [flowError, setFlowError] = useState('');
+  const [sealViewMode, setSealViewMode] = useState<'list' | 'group'>('list');
+  const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [flowForm, setFlowForm] = useState({
     departmentId: '',
     quantity: 1,
@@ -131,6 +133,42 @@ const BatchDetail: React.FC = () => {
   const inStockSeals = useMemo(() => {
     return batch ? batch.seals.filter(s => s.status === 'in_stock') : [];
   }, [batch]);
+
+  const sealsByDepartment = useMemo(() => {
+    const groups: Record<string, { deptName: string; seals: Seal[] }> = {};
+    const inStockKey = '__in_stock__';
+    groups[inStockKey] = { deptName: '在库印章', seals: [] };
+
+    if (!batch) return groups;
+
+    batch.seals.forEach(seal => {
+      if (seal.status === 'in_stock') {
+        groups[inStockKey].seals.push(seal);
+      } else if (seal.currentDepartment) {
+        if (!groups[seal.currentDepartment]) {
+          groups[seal.currentDepartment] = {
+            deptName: seal.currentDepartment,
+            seals: [],
+          };
+        }
+        groups[seal.currentDepartment].seals.push(seal);
+      }
+    });
+
+    return groups;
+  }, [batch]);
+
+  const toggleDeptExpand = (deptKey: string) => {
+    setExpandedDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(deptKey)) {
+        next.delete(deptKey);
+      } else {
+        next.add(deptKey);
+      }
+      return next;
+    });
+  };
 
   const handleSubmitFlow = () => {
     setFlowError('');
@@ -287,16 +325,137 @@ const BatchDetail: React.FC = () => {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>印章清单</CardTitle>
+            <CardHeader className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <CardTitle>印章清单</CardTitle>
+                <div className="flex bg-gray-100 rounded-lg p-0.5">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      sealViewMode === 'list'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setSealViewMode('list')}
+                  >
+                    <List className="w-4 h-4" />
+                    列表视图
+                  </button>
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      sealViewMode === 'group'
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    onClick={() => setSealViewMode('group')}
+                  >
+                    <Layers className="w-4 h-4" />
+                    分组视图
+                  </button>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table
-                data={batch.seals}
-                columns={sealColumns}
-                rowKey={(seal) => seal.id}
-                emptyText="暂无印章数据"
-              />
+            <CardContent className={sealViewMode === 'list' ? 'p-0' : ''}>
+              {sealViewMode === 'list' ? (
+                <Table
+                  data={batch.seals}
+                  columns={sealColumns}
+                  rowKey={(seal) => seal.id}
+                  emptyText="暂无印章数据"
+                />
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(sealsByDepartment).map(([deptKey, group]) => {
+                    const isExpanded = expandedDepts.has(deptKey);
+                    const isInStock = deptKey === '__in_stock__';
+                    const sealCount = group.seals.length;
+                    if (sealCount === 0) return null;
+
+                    return (
+                      <div
+                        key={deptKey}
+                        className={`border rounded-xl overflow-hidden transition-all ${
+                          isExpanded ? 'border-primary/30' : 'border-gray-200'
+                        }`}
+                      >
+                        <button
+                          className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                          onClick={() => toggleDeptExpand(deptKey)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                              isInStock ? 'bg-emerald-100' : 'bg-primary/10'
+                            }`}>
+                              {isInStock ? (
+                                <Package className="w-4.5 h-4.5 text-emerald-600" />
+                              ) : (
+                                <MapPin className="w-4.5 h-4.5 text-primary" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {group.deptName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                共 {sealCount} 枚印章
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {!isInStock && group.seals[0]?.currentHolder && (
+                              <Badge variant="info" size="sm">
+                                领取人：{group.seals[0].currentHolder}
+                              </Badge>
+                            )}
+                            {isExpanded ? (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            )}
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="p-3 bg-white border-t border-gray-100">
+                            <div className="grid grid-cols-2 gap-2">
+                              {group.seals.map(seal => {
+                                const statusConfig = sealStatusConfig[seal.status];
+                                return (
+                                  <div
+                                    key={seal.id}
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div>
+                                      <div className="font-mono text-sm font-semibold text-gray-800">
+                                        {seal.sealCode}
+                                      </div>
+                                      <div className="text-xs text-gray-500 mt-0.5">
+                                        {seal.receivedDate
+                                          ? `领用：${formatDate(seal.receivedDate)}`
+                                          : seal.sealName
+                                        }
+                                      </div>
+                                    </div>
+                                    <Badge variant={statusConfig.variant} size="sm">
+                                      {statusConfig.label}
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {Object.values(sealsByDepartment).every(g => g.seals.length === 0) && (
+                    <div className="text-center text-gray-500 py-8">
+                      <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                      <p>暂无印章数据</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
