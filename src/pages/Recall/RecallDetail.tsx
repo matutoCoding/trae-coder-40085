@@ -11,7 +11,7 @@ import { Timeline, TimelineItem } from '../../components/ui/Timeline';
 import { useRecallStore } from '../../store/useRecallStore';
 import { useBatchStore } from '../../store/useBatchStore';
 import { formatDate, formatDateTime } from '../../utils/date';
-import { recallStatusConfig, priorityConfig, noticeStatusConfig } from '../../utils/status';
+import { recallStatusConfig, priorityConfig, noticeStatusConfig, batchStatusConfig } from '../../utils/status';
 import type { RecallNotice } from '../../types';
 
 const RecallDetail: React.FC = () => {
@@ -180,8 +180,8 @@ const RecallDetail: React.FC = () => {
                   <div className="text-gray-500">批次状态</div>
                   <div className="flex items-center gap-2 mt-1">
                     <Package className="w-4 h-4 text-gray-400" />
-                    <Badge variant={batch ? recallStatusConfig[batch.status].variant : 'default'}>
-                      {batch ? recallStatusConfig[batch.status].label : '未知'}
+                    <Badge variant={batch ? batchStatusConfig[batch.status].variant : 'default'}>
+                      {batch ? batchStatusConfig[batch.status].label : '未知'}
                     </Badge>
                   </div>
                 </div>

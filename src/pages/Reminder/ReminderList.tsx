@@ -31,8 +31,9 @@ const ReminderList: React.FC = () => {
   const overdueNodes = useMemo((): OverdueNodeInfo[] => {
     const result: OverdueNodeInfo[] = [];
     applications.forEach(app => {
+      if (app.status !== 'pending') return;
       app.approvalNodes.forEach(node => {
-        if (node.status === 'pending') {
+        if (node.status === 'pending' && node.orderIndex === app.currentNodeIndex) {
           if (filterType === 'all' ||
               (filterType === 'overdue' && node.isOverdue) ||
               (filterType === 'escalated' && node.isEscalated)) {

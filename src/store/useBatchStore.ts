@@ -78,6 +78,19 @@ export const useBatchStore = create<BatchState>()(
       },
 
       recordFlow: (batchId, flow) => {
+        if (flow.quantity <= 0) {
+          throw new Error('发放数量必须大于0');
+        }
+        
+        const batch = get().batches.find(b => b.id === batchId);
+        if (!batch) {
+          throw new Error('批次不存在');
+        }
+        
+        if (flow.quantity > batch.remainingQuantity) {
+          throw new Error(`发放数量(${flow.quantity})不能超过剩余库存(${batch.remainingQuantity})`);
+        }
+        
         const newFlow: SealFlow = {
           ...flow,
           id: generateId(),
@@ -87,10 +100,32 @@ export const useBatchStore = create<BatchState>()(
         set(state => ({
           batches: state.batches.map(batch => {
             if (batch.id !== batchId) return batch;
+            
+            let sealsToUpdate = flow.seals || [];
+            if (sealsToUpdate.length === 0) {
+              const availableSeals = batch.seals.filter(s => s.status === 'in_stock');
+              sealsToUpdate = availableSeals.slice(0, flow.quantity).map(s => s.id);
+            }
+            
+            const now = new Date().toISOString();
+            const updatedSeals = batch.seals.map(seal => {
+              if (sealsToUpdate.includes(seal.id)) {
+                return {
+                  ...seal,
+                  status: 'in_use' as const,
+                  currentHolder: flow.recipient,
+                  currentDepartment: flow.departmentName,
+                  receivedDate: now,
+                };
+              }
+              return seal;
+            });
+            
             return {
               ...batch,
               remainingQuantity: batch.remainingQuantity - flow.quantity,
-              flows: [...batch.flows, newFlow],
+              flows: [...batch.flows, { ...newFlow, seals: sealsToUpdate }],
+              seals: updatedSeals,
             };
           }),
         }));

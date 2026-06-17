@@ -15,7 +15,12 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
   
   const alertCount = useMemo(() => {
     const overdueCount = applications.filter(app =>
-      app.approvalNodes.some(node => node.isOverdue)
+      app.status === 'pending' &&
+      app.approvalNodes.some(node => 
+        node.isOverdue && 
+        node.orderIndex === app.currentNodeIndex && 
+        node.status === 'pending'
+      )
     ).length;
     const ongoingCount = recalls.filter(
       r => r.status === 'in_progress' || r.status === 'pending'

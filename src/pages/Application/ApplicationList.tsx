@@ -22,7 +22,14 @@ const ApplicationList: React.FC = () => {
       app.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.applicantName.includes(searchTerm) ||
       app.sealName.includes(searchTerm);
-    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
+    let matchesStatus = true;
+    if (statusFilter === 'all') {
+      matchesStatus = true;
+    } else if (statusFilter === 'approved') {
+      matchesStatus = app.status === 'approved' || app.status === 'completed';
+    } else {
+      matchesStatus = app.status === statusFilter;
+    }
     const matchesUrgency = urgencyFilter === 'all' || app.urgency === urgencyFilter;
     return matchesSearch && matchesStatus && matchesUrgency;
   });
@@ -193,21 +200,19 @@ const ApplicationList: React.FC = () => {
 
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: '全部申请', count: statCounts.all, icon: FileText, color: 'primary' },
-          { label: '审批中', count: statCounts.pending, icon: Clock, color: 'warning' },
-          { label: '已通过', count: statCounts.approved, icon: CheckCircle, color: 'success' },
-          { label: '已驳回', count: statCounts.rejected, icon: XCircle, color: 'danger' },
-        ].map((item, index) => (
+          { label: '全部申请', value: 'all', count: statCounts.all, icon: FileText, color: 'primary' },
+          { label: '审批中', value: 'pending', count: statCounts.pending, icon: Clock, color: 'warning' },
+          { label: '已通过', value: 'approved', count: statCounts.approved, icon: CheckCircle, color: 'success' },
+          { label: '已驳回', value: 'rejected', count: statCounts.rejected, icon: XCircle, color: 'danger' },
+        ].map((item) => (
           <div
-            key={item.label}
+            key={item.value}
             className={`p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === (item.label === '全部申请' ? 'all' : item.label.toLowerCase())
+              statusFilter === item.value
                 ? 'border-primary-500 bg-primary-50'
                 : 'border-gray-200 bg-white'
             }`}
-            onClick={() =>
-              setStatusFilter(item.label === '全部申请' ? 'all' : item.label.toLowerCase())
-            }
+            onClick={() => setStatusFilter(item.value)}
           >
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${

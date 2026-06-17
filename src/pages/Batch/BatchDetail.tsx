@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, Calendar, User, MapPin, FileText, AlertTriangle, Send, Plus, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Package, Calendar, User, MapPin, FileText, AlertTriangle, Send, Plus, TrendingUp, CheckCircle, XCircle, Hash } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -20,10 +20,12 @@ const BatchDetail: React.FC = () => {
   const navigate = useNavigate();
   const { getBatch, recordFlow } = useBatchStore();
   const [showFlowModal, setShowFlowModal] = useState(false);
+  const [flowError, setFlowError] = useState('');
   const [flowForm, setFlowForm] = useState({
     departmentId: '',
     quantity: 1,
     recipient: '',
+    autoAssign: true,
     seals: [] as string[],
   });
 
@@ -108,20 +110,53 @@ const BatchDetail: React.FC = () => {
     },
   ];
 
+  const inStockSeals = useMemo(() => {
+    return batch ? batch.seals.filter(s => s.status === 'in_stock') : [];
+  }, [batch]);
+
   const handleSubmitFlow = () => {
-    if (!flowForm.departmentId || !flowForm.recipient) return;
-    const dept = mockDepartments.find(d => d.id === flowForm.departmentId);
-    recordFlow(batch.id, {
-      departmentId: flowForm.departmentId,
-      departmentName: dept?.name || '',
-      quantity: flowForm.quantity,
-      flowDate: new Date().toISOString(),
-      operator: '孙强',
-      seals: flowForm.seals,
-      recipient: flowForm.recipient,
-    });
-    setShowFlowModal(false);
-    setFlowForm({ departmentId: '', quantity: 1, recipient: '', seals: [] });
+    setFlowError('');
+    
+    if (!flowForm.departmentId) {
+      setFlowError('请选择发放部门');
+      return;
+    }
+    if (!flowForm.recipient.trim()) {
+      setFlowError('请输入领取人姓名');
+      return;
+    }
+    if (flowForm.quantity <= 0) {
+      setFlowError('发放数量必须大于0');
+      return;
+    }
+    if (!flowForm.autoAssign && flowForm.seals.length !== flowForm.quantity) {
+      setFlowError(`请选择 ${flowForm.quantity} 枚印章`);
+      return;
+    }
+    
+    try {
+      const dept = mockDepartments.find(d => d.id === flowForm.departmentId);
+      recordFlow(batch.id, {
+        departmentId: flowForm.departmentId,
+        departmentName: dept?.name || '',
+        quantity: flowForm.quantity,
+        flowDate: new Date().toISOString(),
+        operator: '孙强',
+        seals: flowForm.autoAssign ? [] : flowForm.seals,
+        recipient: flowForm.recipient.trim(),
+      });
+      setShowFlowModal(false);
+      setFlowForm({ 
+        departmentId: '', 
+        quantity: 1, 
+        recipient: '', 
+        autoAssign: true, 
+        seals: [] 
+      });
+      setFlowError('');
+    } catch (err: any) {
+      setFlowError(err.message || '发放失败，请重试');
+    }
   };
 
   return (

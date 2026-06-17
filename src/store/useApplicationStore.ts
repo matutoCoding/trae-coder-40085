@@ -200,7 +200,9 @@ export const useApplicationStore = create<ApplicationState>()(
 
       getOverdueList: () => {
         return get().applications.filter(app =>
-          app.approvalNodes.some(node => node.isOverdue)
+          app.approvalNodes.some(node => 
+            node.isOverdue && node.orderIndex === app.currentNodeIndex && node.status === 'pending'
+          )
         );
       },
 
@@ -208,27 +210,84 @@ export const useApplicationStore = create<ApplicationState>()(
         set(state => {
           let hasChanges = false;
           const newApplications = state.applications.map(app => {
+            if (app.status !== 'pending') return app;
+            
             let appChanged = false;
             const newNodes = app.approvalNodes.map(node => {
               if (node.status !== 'pending') return node;
+              if (node.orderIndex !== app.currentNodeIndex) return node;
+              
               const overdueHours = getOverdueHours(node.deadline);
               const newIsOverdue = overdueHours > 0;
+              
+              let updatedNode = { ...node };
+              let nodeChanged = false;
+              
               if (node.isOverdue !== newIsOverdue || node.overdueHours !== overdueHours) {
+                updatedNode.isOverdue = newIsOverdue;
+                updatedNode.overdueHours = overdueHours;
+                nodeChanged = true;
+              }
+              
+              if (newIsOverdue) {
+                const normalReminders = node.reminders.filter(r => r.type === 'normal');
+                const hasEscalated = node.reminders.some(r => r.type === 'escalation');
+                
+                if (overdueHours >= 24 && normalReminders.length === 0) {
+                  const reminder: ReminderRecord = {
+                    id: generateId(),
+                    nodeId: node.id,
+                    type: 'normal',
+                    content: `您的用印审批已超时${overdueHours}小时，请尽快处理`,
+                    sentAt: new Date().toISOString(),
+                  };
+                  updatedNode.reminders = [...node.reminders, reminder];
+                  nodeChanged = true;
+                }
+                
+                if (overdueHours >= 48 && normalReminders.length === 1) {
+                  const reminder: ReminderRecord = {
+                    id: generateId(),
+                    nodeId: node.id,
+                    type: 'normal',
+                    content: `重要提醒：用印审批已超时${overdueHours}小时，请立即处理`,
+                    sentAt: new Date().toISOString(),
+                  };
+                  updatedNode.reminders = [...updatedNode.reminders, reminder];
+                  nodeChanged = true;
+                }
+                
+                if (overdueHours >= 72 && !hasEscalated) {
+                  const escalationUser = mockUsers.find(u => u.departmentId === 'd007');
+                  const reminder: ReminderRecord = {
+                    id: generateId(),
+                    nodeId: node.id,
+                    type: 'escalation',
+                    content: `审批已超时${overdueHours}小时，已自动升级至上级领导`,
+                    sentAt: new Date().toISOString(),
+                    escalatedTo: escalationUser?.id,
+                    escalatedToName: escalationUser?.name || '总经理',
+                  };
+                  updatedNode.isEscalated = true;
+                  updatedNode.reminders = [...updatedNode.reminders, reminder];
+                  nodeChanged = true;
+                }
+              }
+              
+              if (nodeChanged) {
                 appChanged = true;
                 hasChanges = true;
-                return {
-                  ...node,
-                  isOverdue: newIsOverdue,
-                  overdueHours,
-                };
+                return updatedNode;
               }
               return node;
             });
+            
             if (appChanged) {
               return { ...app, approvalNodes: newNodes };
             }
             return app;
           });
+          
           if (!hasChanges) return state;
           return { applications: newApplications };
         });
