@@ -39,7 +39,6 @@ export const useApplicationStore = create<ApplicationState>()(
         const applicant = mockUsers[0];
         const urgency = (data.urgency || 'normal') as 'normal' | 'urgent' | 'emergency';
         const rule = useOverdueRuleStore.getState().getRuleByUrgency(urgency);
-        const nodeTimeoutHours = rule.firstReminderHours * 2;
         const now = new Date();
 
         const approvalNodes: ApprovalNode[] = [
@@ -51,7 +50,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '部门主管审批',
             orderIndex: 0,
             status: 'pending',
-            deadline: addHours(now, nodeTimeoutHours),
+            deadline: addHours(now, rule.firstReminderHours),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -65,7 +64,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '行政复核',
             orderIndex: 1,
             status: 'pending',
-            deadline: addHours(now, nodeTimeoutHours * 2),
+            deadline: addHours(now, rule.firstReminderHours * 2),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -79,7 +78,7 @@ export const useApplicationStore = create<ApplicationState>()(
             nodeName: '印章管理员用印',
             orderIndex: 2,
             status: 'pending',
-            deadline: addHours(now, nodeTimeoutHours * 3),
+            deadline: addHours(now, rule.firstReminderHours * 3),
             isOverdue: false,
             isEscalated: false,
             overdueHours: 0,
@@ -245,35 +244,34 @@ export const useApplicationStore = create<ApplicationState>()(
               if (newIsOverdue) {
                 const normalReminders = node.reminders.filter(r => r.type === 'normal');
                 const hasEscalated = node.reminders.some(r => r.type === 'escalation');
-                
-                if (overdueHours >= rule.firstReminderHours && normalReminders.length === 0) {
+                const secondReminderOffset = rule.secondReminderHours - rule.firstReminderHours;
+                const escalationOffset = rule.escalationHours - rule.firstReminderHours;
+
+                if (normalReminders.length === 0) {
                   const reminder: ReminderRecord = {
                     id: generateId(),
                     nodeId: node.id,
                     type: 'normal',
-                    content: `您的用印审批已超时${overdueHours.toFixed(1)}小时，请尽快处理`,
+                    content: `您的用印审批已超时${overdueHours.toFixed(1)}小时，请尽快处理（一级催办）`,
                     sentAt: new Date().toISOString(),
                   };
                   updatedNode.reminders = [...node.reminders, reminder];
                   nodeChanged = true;
                 }
                 
-                if (overdueHours >= rule.secondReminderHours && normalReminders.length <= 1) {
-                  const hasSecond = normalReminders.length >= 2;
-                  if (!hasSecond) {
-                    const reminder: ReminderRecord = {
-                      id: generateId(),
-                      nodeId: node.id,
-                      type: 'normal',
-                      content: `重要提醒：用印审批已超时${overdueHours.toFixed(1)}小时，请立即处理`,
-                      sentAt: new Date().toISOString(),
-                    };
-                    updatedNode.reminders = [...updatedNode.reminders, reminder];
-                    nodeChanged = true;
-                  }
+                if (overdueHours >= secondReminderOffset && normalReminders.length === 1) {
+                  const reminder: ReminderRecord = {
+                    id: generateId(),
+                    nodeId: node.id,
+                    type: 'normal',
+                    content: `重要提醒：用印审批已超时${overdueHours.toFixed(1)}小时，请立即处理（二级催办）`,
+                    sentAt: new Date().toISOString(),
+                  };
+                  updatedNode.reminders = [...updatedNode.reminders, reminder];
+                  nodeChanged = true;
                 }
                 
-                if (overdueHours >= rule.escalationHours && !hasEscalated) {
+                if (overdueHours >= escalationOffset && !hasEscalated) {
                   const escalationUser = mockUsers.find(u => u.id === rule.escalationRoleId);
                   const now = new Date().toISOString();
                   const reminder: ReminderRecord = {

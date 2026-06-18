@@ -290,18 +290,21 @@ const ApplicationDetail: React.FC = () => {
                     </p>
                   )}
                   <div className="flex items-center gap-2 text-sm">
-                    <Clock className={`h-4 w-4 ${
-                      currentNode.status === 'escalated' 
-                        ? 'text-rose-500' 
-                        : isOverdue ? 'text-amber-500' : 'text-gray-400'
-                    }`} />
-                    <span className={
-                      currentNode.status === 'escalated' 
-                        ? 'text-rose-600 font-medium' 
-                        : isOverdue ? 'text-amber-600 font-medium' : 'text-gray-600'
-                    }>
-                      {formatRemainingTime(currentNode.deadline)}
-                    </span>
+                    {currentNode.status === 'escalated' ? (
+                      <>
+                        <TrendingUp className="h-4 w-4 text-rose-500" />
+                        <span className="text-rose-600 font-medium">
+                          升级时间：{currentNode.escalatedAt ? formatDateTime(currentNode.escalatedAt) : '-'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className={`h-4 w-4 ${isOverdue ? 'text-amber-500' : 'text-gray-400'}`} />
+                        <span className={isOverdue ? 'text-amber-600 font-medium' : 'text-gray-600'}>
+                          {formatRemainingTime(currentNode.deadline)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -370,13 +373,17 @@ const ApplicationDetail: React.FC = () => {
                             : node.status === 'rejected'
                             ? 'danger'
                             : node.status === 'escalated'
-                            ? 'orange'
+                            ? 'danger'
                             : node.isOverdue
                             ? 'warning'
                             : 'default'
                         }
                       >
-                        {node.isOverdue ? '已超时' : nodeConfig.label}
+                        {node.status === 'escalated'
+                          ? '已升级'
+                          : node.isOverdue
+                          ? '已超时'
+                          : nodeConfig.label}
                       </Badge>
                     </div>
                     <p className="text-xs text-gray-500">{node.approverName}</p>

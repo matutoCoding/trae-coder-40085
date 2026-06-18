@@ -134,24 +134,53 @@ const BatchDetail: React.FC = () => {
     return batch ? batch.seals.filter(s => s.status === 'in_stock') : [];
   }, [batch]);
 
+  interface RecipientGroup {
+    recipientName: string;
+    seals: Seal[];
+  }
+
+  interface DepartmentGroup {
+    deptName: string;
+    isInStock?: boolean;
+    recipients: Record<string, RecipientGroup>;
+    totalCount: number;
+  }
+
   const sealsByDepartment = useMemo(() => {
-    const groups: Record<string, { deptName: string; seals: Seal[] }> = {};
+    const groups: Record<string, DepartmentGroup> = {};
     const inStockKey = '__in_stock__';
-    groups[inStockKey] = { deptName: '在库印章', seals: [] };
+    groups[inStockKey] = { deptName: '在库印章', isInStock: true, recipients: {}, totalCount: 0 };
 
     if (!batch) return groups;
 
     batch.seals.forEach(seal => {
       if (seal.status === 'in_stock') {
-        groups[inStockKey].seals.push(seal);
+        const group = groups[inStockKey];
+        const recipientKey = '__stock__';
+        if (!group.recipients[recipientKey]) {
+          group.recipients[recipientKey] = { recipientName: '在库', seals: [] };
+        }
+        group.recipients[recipientKey].seals.push(seal);
+        group.totalCount++;
       } else if (seal.currentDepartment) {
-        if (!groups[seal.currentDepartment]) {
-          groups[seal.currentDepartment] = {
+        const deptKey = seal.currentDepartment;
+        if (!groups[deptKey]) {
+          groups[deptKey] = {
             deptName: seal.currentDepartment,
+            recipients: {},
+            totalCount: 0,
+          };
+        }
+        const recipientName = seal.currentHolder || '未指定';
+        const recipientKey = recipientName;
+        if (!groups[deptKey].recipients[recipientKey]) {
+          groups[deptKey].recipients[recipientKey] = {
+            recipientName,
             seals: [],
           };
         }
-        groups[seal.currentDepartment].seals.push(seal);
+        groups[deptKey].recipients[recipientKey].seals.push(seal);
+        groups[deptKey].totalCount++;
       }
     });
 
@@ -165,6 +194,19 @@ const BatchDetail: React.FC = () => {
         next.delete(deptKey);
       } else {
         next.add(deptKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleRecipientExpand = (deptKey: string, recipientKey: string) => {
+    const combinedKey = `${deptKey}__${recipientKey}`;
+    setExpandedDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(combinedKey)) {
+        next.delete(combinedKey);
+      } else {
+        next.add(combinedKey);
       }
       return next;
     });
@@ -366,9 +408,9 @@ const BatchDetail: React.FC = () => {
                 <div className="space-y-3">
                   {Object.entries(sealsByDepartment).map(([deptKey, group]) => {
                     const isExpanded = expandedDepts.has(deptKey);
-                    const isInStock = deptKey === '__in_stock__';
-                    const sealCount = group.seals.length;
-                    if (sealCount === 0) return null;
+                    const isInStock = group.isInStock;
+                    if (group.totalCount === 0) return null;
+                    const recipientEntries = Object.entries(group.recipients);
 
                     return (
                       <div
@@ -396,16 +438,11 @@ const BatchDetail: React.FC = () => {
                                 {group.deptName}
                               </div>
                               <div className="text-sm text-gray-500">
-                                共 {sealCount} 枚印章
+                                共 {group.totalCount} 枚印章 · {recipientEntries.length} 位领取人
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            {!isInStock && group.seals[0]?.currentHolder && (
-                              <Badge variant="info" size="sm">
-                                领取人：{group.seals[0].currentHolder}
-                              </Badge>
-                            )}
                             {isExpanded ? (
                               <ChevronDown className="w-5 h-5 text-gray-400" />
                             ) : (
@@ -415,40 +452,108 @@ const BatchDetail: React.FC = () => {
                         </button>
 
                         {isExpanded && (
-                          <div className="p-3 bg-white border-t border-gray-100">
-                            <div className="grid grid-cols-2 gap-2">
-                              {group.seals.map(seal => {
-                                const statusConfig = sealStatusConfig[seal.status];
-                                return (
-                                  <div
-                                    key={seal.id}
-                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                                  >
-                                    <div>
-                                      <div className="font-mono text-sm font-semibold text-gray-800">
-                                        {seal.sealCode}
+                          <div className="bg-white border-t border-gray-100">
+                            {isInStock ? (
+                              <div className="p-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                  {recipientEntries[0]?.[1].seals.map(seal => {
+                                    const statusConfig = sealStatusConfig[seal.status];
+                                    return (
+                                      <div
+                                        key={seal.id}
+                                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                      >
+                                        <div>
+                                          <div className="font-mono text-sm font-semibold text-gray-800">
+                                            {seal.sealCode}
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-0.5">
+                                            {seal.sealName}
+                                          </div>
+                                        </div>
+                                        <Badge variant={statusConfig.variant} size="sm">
+                                          {statusConfig.label}
+                                        </Badge>
                                       </div>
-                                      <div className="text-xs text-gray-500 mt-0.5">
-                                        {seal.receivedDate
-                                          ? `领用：${formatDate(seal.receivedDate)}`
-                                          : seal.sealName
-                                        }
-                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="divide-y divide-gray-100">
+                                {recipientEntries.map(([recipientKey, recipientGroup]) => {
+                                  const combinedKey = `${deptKey}__${recipientKey}`;
+                                  const recipientExpanded = expandedDepts.has(combinedKey);
+
+                                  return (
+                                    <div key={recipientKey} className="last:rounded-b-xl overflow-hidden">
+                                      <button
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition-colors text-left pl-14"
+                                        onClick={() => toggleRecipientExpand(deptKey, recipientKey)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
+                                            <User className="w-3.5 h-3.5 text-amber-600" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-medium text-gray-800">
+                                              {recipientGroup.recipientName}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                              领用 {recipientGroup.seals.length} 枚
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {recipientExpanded ? (
+                                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                                        ) : (
+                                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                                        )}
+                                      </button>
+
+                                      {recipientExpanded && (
+                                        <div className="bg-gray-50 border-t border-gray-100 p-3 pl-14">
+                                          <div className="grid grid-cols-2 gap-2">
+                                            {recipientGroup.seals.map(seal => {
+                                              const statusConfig = sealStatusConfig[seal.status];
+                                              return (
+                                                <div
+                                                  key={seal.id}
+                                                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100"
+                                                >
+                                                  <div>
+                                                    <div className="font-mono text-sm font-semibold text-gray-800">
+                                                      {seal.sealCode}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                                      <Calendar className="w-3 h-3" />
+                                                      {seal.receivedDate
+                                                        ? formatDate(seal.receivedDate)
+                                                        : '未记录'
+                                                      }
+                                                    </div>
+                                                  </div>
+                                                  <Badge variant={statusConfig.variant} size="sm">
+                                                    {statusConfig.label}
+                                                  </Badge>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                    <Badge variant={statusConfig.variant} size="sm">
-                                      {statusConfig.label}
-                                    </Badge>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     );
                   })}
 
-                  {Object.values(sealsByDepartment).every(g => g.seals.length === 0) && (
+                  {Object.values(sealsByDepartment).every(g => g.totalCount === 0) && (
                     <div className="text-center text-gray-500 py-8">
                       <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                       <p>暂无印章数据</p>

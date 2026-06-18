@@ -113,13 +113,14 @@ const ReminderList: React.FC = () => {
                 item.node.status === 'escalated' ? 'danger' : 
                 item.node.isOverdue ? 'warning' : 'info'
               } 
-              pulse={item.node.isOverdue || item.node.status === 'escalated'} 
+              pulse={item.node.status === 'escalated' || item.node.isOverdue} 
             />
             <span className={`text-sm font-medium ${
-              item.node.status === 'escalated' ? 'text-red-600' :
-              item.node.isOverdue ? 'text-red-600' : 'text-gray-600'
+              item.node.status === 'escalated' ? 'text-rose-600' :
+              item.node.isOverdue ? 'text-amber-600' : 'text-gray-600'
             }`}>
-              {nodeStatusConfig[item.node.status].label}
+              {item.node.status === 'escalated' ? '已升级' :
+               item.node.isOverdue ? '已超时' : '处理中'}
             </span>
           </div>
           {item.node.status === 'escalated' && item.node.escalatedToName && (
@@ -133,26 +134,36 @@ const ReminderList: React.FC = () => {
     },
     {
       key: 'deadline',
-      title: '超时情况',
-      width: '180px',
+      title: '超时/升级情况',
+      width: '200px',
       render: (item) => (
         <div className="space-y-1">
-          {item.node.isOverdue ? (
+          {item.node.status === 'escalated' ? (
             <>
-              <div className="flex items-center gap-1.5 text-red-600 font-medium">
+              <div className="flex items-center gap-1.5 text-rose-600 font-medium">
+                <TrendingUp className="w-4 h-4" />
+                <span>已升级至 {item.node.escalatedToName || '上级'}</span>
+              </div>
+              <div className="text-sm text-gray-500">
+                升级时间：{item.node.escalatedAt ? formatDateTime(item.node.escalatedAt) : '-'}
+              </div>
+              <div className="text-xs text-gray-400">
+                已超时 {item.node.overdueHours.toFixed(1)} 小时
+              </div>
+            </>
+          ) : item.node.isOverdue ? (
+            <>
+              <div className="flex items-center gap-1.5 text-amber-600 font-medium">
                 <AlertTriangle className="w-4 h-4" />
                 <span>已超时 {item.node.overdueHours.toFixed(1)} 小时</span>
               </div>
               <div className="text-sm text-gray-500">
                 截止：{formatDateTime(item.node.deadline)}
               </div>
-              {item.node.isEscalated && (
-                <Badge variant="danger" size="sm">已升级</Badge>
-              )}
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1.5 text-amber-600 font-medium">
+              <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
                 <Clock className="w-4 h-4" />
                 <span>剩余 {formatRemainingTime(item.node.deadline)}</span>
               </div>
